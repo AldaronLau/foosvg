@@ -5,3 +5,6 @@ authors = ["Jeron Aldaron Lau <jeronaldaron@gmail.com>"]
 edition = "2018"
 
 [dependencies]
+png = "0.10"
+usvg = "0.6"
+footile = { path = "../footile2" }
