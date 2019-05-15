@@ -5,20 +5,49 @@ use usvg;
 use usvg::svgdom::WriteBuffer;
 use usvg::svgdom::{ AttributeId, AttributeValue, Document, ElementId, FilterSvg, PathSegment };
 
-/// Render an SVG onto a pixel buffer.
-pub fn render(svg: &str, width: u32, height: u32, pixels: Vec<Rgba8>) -> Vec<Rgba8> {
+/// Render an SVG onto a pixel buffer.  Returns width, height and pixels.
+pub fn render(svg: &str) -> (u32, u32, Vec<Rgba8>) {
     // Simplify SVG with usvg.
     let tree = usvg::Tree::from_str(svg, &usvg::Options::default()).unwrap();
     let svg = tree.to_svgdom().with_write_opt(&usvg::svgdom::WriteOptions::default()).to_string();
-//    println!("SVG: {}", svg);
-
-    // Make Raster
-    let mut p = Plotter::new(width, height);
-    let mut r = Raster::with_pixels(p.width(), p.height(), pixels);
+    println!("SVG: {}", svg);
 
     // Render
     let doc = Document::from_str(&svg).unwrap();
-    for (id, node) in doc.root().descendants().svg() {
+    let mut iter = doc.root().descendants().svg();
+
+    let (width, height) = if let Some((id, node)) = iter.next() {
+        if id == ElementId::Svg {
+            let attrs = node.attributes();
+            let width;
+            let height;
+
+            println!("{:?}", attrs);
+
+            if let Some(&AttributeValue::Length(ref v)) = attrs.get_value(AttributeId::Width) {
+                width = v.num as u32;
+            } else {
+                panic!("Width unspecified!");
+            }
+            if let Some(&AttributeValue::Length(ref v)) = attrs.get_value(AttributeId::Height) {
+                height = v.num as u32;
+            } else {
+                panic!("Height unspecified!");
+            }
+
+            (width, height)
+        } else {
+            panic!("Not an SVG!");
+        }
+    } else {
+        panic!("SVG is an empty file!");
+    };
+
+    // Make Raster
+    let mut p = Plotter::new(width, height);
+    let mut r = Raster::new(p.width(), p.height());
+
+    for (id, node) in iter {
         match id {
             ElementId::Path => {
                 let mut pathbuilder = PathBuilder::new();
@@ -100,7 +129,15 @@ pub fn render(svg: &str, width: u32, height: u32, pixels: Vec<Rgba8>) -> Vec<Rgb
                 }
 
                 let path = pathbuilder.build();
-                r.over(p.fill(&path, footile::FillRule::NonZero), Rgba8::rgb(208, 255, 208));
+
+                if let Some(&AttributeValue::Color(ref c)) = attrs.get_value(AttributeId::Fill) {
+                    r.over(p.fill(&path, footile::FillRule::NonZero), Rgba8::rgb(c.red, c.green, c.blue));
+                }
+
+                if let Some(&AttributeValue::Color(ref c)) = attrs.get_value(AttributeId::Stroke) {
+                    r.over(p.fill(&path, footile::FillRule::NonZero), Rgba8::rgb(c.red, c.green, c.blue));
+                }
+                // END PATH
             }
             a => {
                 println!("WARNING: Element Unknown {}", a);
@@ -109,7 +146,7 @@ pub fn render(svg: &str, width: u32, height: u32, pixels: Vec<Rgba8>) -> Vec<Rgb
     }
 
     // Return pixels
-    r.into()
+    (width, height, r.as_slice().to_vec())
 }
 
 #[cfg(test)]

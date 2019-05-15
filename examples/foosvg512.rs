@@ -16,10 +16,10 @@ pub fn write_png(width: u32, height: u32, pixels: &[Rgba8], filename: &str) -> s
 
 fn main() {
     let args: Vec<String> = std::env::args().collect();
-    let pixels = vec![Rgba8::default(); 512 * 512];
+//    let pixels = vec![Rgba8::default(); 512 * 512];
     assert_eq!(args.len(), 2);
     let svg = std::fs::read_to_string(&args[1]).unwrap();
-    let pixels = render(&svg, 512, 512, pixels);
+    let (width, height, pixels) = render(&svg);
 
-    write_png(512, 512, &pixels, &format!("{}.png", args[1])).unwrap();
+    write_png(width, height, &pixels, &format!("{}.png", args[1])).unwrap();
 }
