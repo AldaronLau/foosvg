@@ -1,12 +1,11 @@
-pub use footile::Rgba8;
+pub use pix::{Raster, rgb::{SRgba8, Rgba8p}, ops::SrcOver, el::Pixel};
 
-use footile::{PathBuilder,Plotter,Raster};
+use footile::{PathBuilder,Plotter};
 use usvg;
-use usvg::svgdom::WriteBuffer;
-use usvg::svgdom::{ AttributeId, AttributeValue, Document, ElementId, FilterSvg, PathSegment };
+use usvg::svgdom::{WriteBuffer, AttributeId, AttributeValue, Document, ElementId, FilterSvg, PathSegment };
 
 /// Render an SVG onto a pixel buffer.  Returns width, height and pixels.
-pub fn render(svg: &str) -> (u32, u32, Vec<Rgba8>) {
+pub fn render(svg: &str) -> Raster<SRgba8> {
     // Simplify SVG with usvg.
     let tree = usvg::Tree::from_str(svg, &usvg::Options::default()).unwrap();
     let svg = tree.to_svgdom().with_write_opt(&usvg::svgdom::WriteOptions::default()).to_string();
@@ -44,13 +43,12 @@ pub fn render(svg: &str) -> (u32, u32, Vec<Rgba8>) {
     };
 
     // Make Raster
-    let mut p = Plotter::new(width, height);
-    let mut r = Raster::new(p.width(), p.height());
+    let mut p = Plotter::new(Raster::<Rgba8p>::with_clear(width, height));
 
     for (id, node) in iter {
         match id {
             ElementId::Path => {
-                let mut pathbuilder = PathBuilder::new();
+                let mut pathbuilder = PathBuilder::default();
                 let mut old_x = 0.0f32;
                 let mut old_y = 0.0f32;
 
@@ -131,11 +129,11 @@ pub fn render(svg: &str) -> (u32, u32, Vec<Rgba8>) {
                 let path = pathbuilder.build();
 
                 if let Some(&AttributeValue::Color(ref c)) = attrs.get_value(AttributeId::Fill) {
-                    r.over(p.fill(&path, footile::FillRule::NonZero), Rgba8::rgb(c.red, c.green, c.blue));
+                    p.fill(footile::FillRule::NonZero, &path, SRgba8::new(c.red, c.green, c.blue, 255).convert());
                 }
 
                 if let Some(&AttributeValue::Color(ref c)) = attrs.get_value(AttributeId::Stroke) {
-                    r.over(p.fill(&path, footile::FillRule::NonZero), Rgba8::rgb(c.red, c.green, c.blue));
+                    p.stroke(&path, SRgba8::new(c.red, c.green, c.blue, 255).convert());
                 }
                 // END PATH
             }
@@ -146,7 +144,7 @@ pub fn render(svg: &str) -> (u32, u32, Vec<Rgba8>) {
     }
 
     // Return pixels
-    (width, height, r.as_slice().to_vec())
+    Raster::with_raster(&p.raster())
 }
 
 #[cfg(test)]
