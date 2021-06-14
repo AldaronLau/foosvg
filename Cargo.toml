@@ -6,6 +6,6 @@ edition = "2018"
 
 [dependencies]
 png_pong = "0.7"
-usvg = "0.6"
+usvg = "0.15"
 footile = "0.6"
 pix = "0.13"
