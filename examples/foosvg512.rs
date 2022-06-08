@@ -1,5 +1,5 @@
 use foosvg::render;
-use png_pong::{PngRaster, Encoder};
+use png_pong::{Encoder, PngRaster};
 
 fn main() {
     let args: Vec<String> = std::env::args().collect();
@@ -10,6 +10,6 @@ fn main() {
     let fl = std::fs::File::create(&format!("{}.png", args[1])).expect("Failed to create image");
     let mut bw = std::io::BufWriter::new(fl);
     let mut encoder = Encoder::new(&mut bw).into_step_enc();
-    let step = png_pong::Step{ raster, delay: 0 };
+    let step = png_pong::Step { raster, delay: 0 };
     encoder.encode(&step).expect("Failed to add frame");
 }
