@@ -1,14 +1,25 @@
-pub use pix::{Raster, rgb::{SRgba8, Rgba8p}, ops::SrcOver, el::Pixel};
+pub use pix::{
+    el::Pixel,
+    ops::SrcOver,
+    rgb::{Rgba8p, SRgba8},
+    Raster,
+};
 
-use footile::{PathBuilder,Plotter};
+use footile::{PathOp, Plotter};
+use pointy::Pt;
 use usvg;
-use usvg::svgdom::{WriteBuffer, AttributeId, AttributeValue, Document, ElementId, FilterSvg, PathSegment };
+use usvg::svgdom::{
+    AttributeId, AttributeValue, Document, ElementId, FilterSvg, PathSegment, WriteBuffer,
+};
 
 /// Render an SVG onto a pixel buffer.  Returns width, height and pixels.
 pub fn render(svg: &str) -> Raster<SRgba8> {
     // Simplify SVG with usvg.
     let tree = usvg::Tree::from_str(svg, &usvg::Options::default()).unwrap();
-    let svg = tree.to_svgdom().with_write_opt(&usvg::svgdom::WriteOptions::default()).to_string();
+    let svg = tree
+        .to_svgdom()
+        .with_write_opt(&usvg::svgdom::WriteOptions::default())
+        .to_string();
     println!("SVG: {}", svg);
 
     // Render
@@ -48,7 +59,7 @@ pub fn render(svg: &str) -> Raster<SRgba8> {
     for (id, node) in iter {
         match id {
             ElementId::Path => {
-                let mut pathbuilder = PathBuilder::default();
+                let mut pathbuilder = Vec::new();
                 let mut old_x = 0.0f32;
                 let mut old_y = 0.0f32;
 
@@ -59,81 +70,112 @@ pub fn render(svg: &str) -> Raster<SRgba8> {
                         match seg {
                             PathSegment::MoveTo { abs, x, y } => {
                                 if *abs {
-                                    pathbuilder = pathbuilder.absolute();
+                                    old_x = *x as f32;
+                                    old_y = *y as f32;
                                 } else {
-                                    pathbuilder = pathbuilder.relative();
+                                    old_x += *x as f32;
+                                    old_y += *y as f32;
                                 }
-                                pathbuilder = pathbuilder.move_to(*x as f32, *y as f32);
-                                old_x = *x as f32;
-                                old_y = *y as f32;
+                                pathbuilder.push(PathOp::Move(Pt::new(old_x, old_y)));
                             }
                             PathSegment::LineTo { abs, x, y } => {
                                 if *abs {
-                                    pathbuilder = pathbuilder.absolute();
+                                    old_x = *x as f32;
+                                    old_y = *y as f32;
                                 } else {
-                                    pathbuilder = pathbuilder.relative();
+                                    old_x += *x as f32;
+                                    old_y += *y as f32;
                                 }
-                                pathbuilder = pathbuilder.line_to(*x as f32, *y as f32);
-                                old_x = *x as f32;
-                                old_y = *y as f32;
+                                pathbuilder.push(PathOp::Line(Pt::new(old_x, old_y)));
                             }
                             PathSegment::HorizontalLineTo { abs, x } => {
                                 if *abs {
-                                    pathbuilder = pathbuilder.absolute();
+                                    old_x = *x as f32;
                                 } else {
-                                    pathbuilder = pathbuilder.relative();
+                                    old_x += *x as f32;
                                 }
-                                pathbuilder = pathbuilder.line_to(*x as f32, old_y);
-                                old_x = *x as f32;
+                                pathbuilder.push(PathOp::Line(Pt::new(old_x, old_y)));
                             }
                             PathSegment::VerticalLineTo { abs, y } => {
                                 if *abs {
-                                    pathbuilder = pathbuilder.absolute();
+                                    old_y = *y as f32;
                                 } else {
-                                    pathbuilder = pathbuilder.relative();
+                                    old_y += *y as f32;
                                 }
-                                pathbuilder = pathbuilder.line_to(old_x, *y as f32);
-                                old_y = *y as f32;
+                                pathbuilder.push(PathOp::Line(Pt::new(old_x, old_y)));
                             }
                             PathSegment::Quadratic { abs, x1, y1, x, y } => {
-                                if *abs {
-                                    pathbuilder = pathbuilder.absolute();
+                                let (x1, y1) = if *abs {
+                                    old_x = *x as f32;
+                                    old_y = *y as f32;
+                                    (*x1 as f32, *y1 as f32)
                                 } else {
-                                    pathbuilder = pathbuilder.relative();
-                                }
-                                pathbuilder = pathbuilder.quad_to(*x1 as f32, *y1 as f32, *x as f32, *y as f32);
+                                    let x1 = old_x + *x1 as f32;
+                                    let y1 = old_y + *y1 as f32;
+                                    old_x += *x as f32;
+                                    old_y += *y as f32;
+                                    (x1, y1)
+                                };
+
+                                pathbuilder
+                                    .push(PathOp::Quad(Pt::new(x1, y1), Pt::new(old_x, old_y)));
                             }
-                            PathSegment::CurveTo { abs, x1, y1, x2, y2, x, y } => {
-                                if *abs {
-                                    pathbuilder = pathbuilder.absolute();
+                            PathSegment::CurveTo {
+                                abs,
+                                x1,
+                                y1,
+                                x2,
+                                y2,
+                                x,
+                                y,
+                            } => {
+                                let (x1, y1, x2, y2) = if *abs {
+                                    old_x = *x as f32;
+                                    old_y = *y as f32;
+                                    (*x1 as f32, *y1 as f32, *x2 as f32, *y2 as f32)
                                 } else {
-                                    pathbuilder = pathbuilder.relative();
-                                }
-                                pathbuilder = pathbuilder.cubic_to(*x1 as f32, *y1 as f32, *x2 as f32, *y2 as f32, *x as f32, *y as f32); // TODO: verify order.
+                                    let x1 = old_x + *x1 as f32;
+                                    let y1 = old_y + *y1 as f32;
+                                    let x2 = old_x + *x2 as f32;
+                                    let y2 = old_y + *y2 as f32;
+                                    old_x += *x as f32;
+                                    old_y += *y as f32;
+                                    (x1, y1, x2, y2)
+                                };
+
+                                // TODO: verify order.
+                                pathbuilder.push(PathOp::Cubic(
+                                    Pt::new(x1, y1),
+                                    Pt::new(x2, y2),
+                                    Pt::new(old_x, old_y),
+                                ));
                             }
                             PathSegment::ClosePath { abs } => {
                                 if *abs {
-                                    pathbuilder = pathbuilder.absolute();
-                                } else {
-                                    pathbuilder = pathbuilder.relative();
+                                    old_x = 0.0;
+                                    old_y = 0.0;
                                 }
-                                pathbuilder = pathbuilder.close();
+                                pathbuilder.push(PathOp::Close());
                             }
                             a => {
                                 println!("WARNING: Path Unknown {:?}", a);
-                            },
+                            }
                         }
                     }
                 }
 
-                let path = pathbuilder.build();
+                let path = pathbuilder.as_slice();
 
                 if let Some(&AttributeValue::Color(ref c)) = attrs.get_value(AttributeId::Fill) {
-                    p.fill(footile::FillRule::NonZero, &path, SRgba8::new(c.red, c.green, c.blue, 255).convert());
+                    p.fill(
+                        footile::FillRule::NonZero,
+                        path,
+                        SRgba8::new(c.red, c.green, c.blue, 255).convert(),
+                    );
                 }
 
                 if let Some(&AttributeValue::Color(ref c)) = attrs.get_value(AttributeId::Stroke) {
-                    p.stroke(&path, SRgba8::new(c.red, c.green, c.blue, 255).convert());
+                    p.stroke(path, SRgba8::new(c.red, c.green, c.blue, 255).convert());
                 }
                 // END PATH
             }
