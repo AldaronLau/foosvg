@@ -7,7 +7,7 @@ pub use pix::{
 
 use footile::{PathOp, Plotter};
 use pointy::Pt;
-use usvg::{Options, XmlOptions, Tree, PathSegment, NodeKind, Path};
+use usvg::{NodeKind, Options, Path, PathSegment, Tree, XmlOptions};
 
 /// Render an SVG onto a pixel buffer.  Returns width, height and pixels.
 pub fn render(svg: &str) -> Raster<SRgba8> {
@@ -46,9 +46,7 @@ pub fn render(svg: &str) -> Raster<SRgba8> {
                 data: path_data,
             }) => {
                 let mut pathbuilder = Vec::new();
-                let mut old_x = 0.0f32;
-                let mut old_y = 0.0f32;
-                
+
                 if let Some(stroke) = stroke {
                     pathbuilder.push(PathOp::PenWidth(stroke.width.value() as f32));
                 }
@@ -57,14 +55,12 @@ pub fn render(svg: &str) -> Raster<SRgba8> {
                     println!("{:?}", seg);
                     match seg {
                         PathSegment::MoveTo { x, y } => {
-                            old_x = *x as f32;
-                            old_y = *y as f32;
-                            pathbuilder.push(PathOp::Move(Pt::new(old_x, old_y)));
+                            let (x, y) = (*x as f32, *y as f32);
+                            pathbuilder.push(PathOp::Move(Pt::new(x, y)));
                         }
                         PathSegment::LineTo { x, y } => {
-                            old_x = *x as f32;
-                            old_y = *y as f32;
-                            pathbuilder.push(PathOp::Line(Pt::new(old_x, old_y)));
+                            let (x, y) = (*x as f32, *y as f32);
+                            pathbuilder.push(PathOp::Line(Pt::new(x, y)));
                         }
                         PathSegment::CurveTo {
                             x1,
@@ -74,17 +70,14 @@ pub fn render(svg: &str) -> Raster<SRgba8> {
                             x,
                             y,
                         } => {
-                            let (x1, y1, x2, y2) = {
-                                old_x = *x as f32;
-                                old_y = *y as f32;
-                                (*x1 as f32, *y1 as f32, *x2 as f32, *y2 as f32)
-                            };
+                            let (x1, y1) = (*x1 as f32, *y1 as f32);
+                            let (x2, y2) = (*x2 as f32, *y2 as f32);
+                            let (x, y) = (*x as f32, *y as f32);
 
-                            // TODO: verify order.
                             pathbuilder.push(PathOp::Cubic(
                                 Pt::new(x1, y1),
                                 Pt::new(x2, y2),
-                                Pt::new(old_x, old_y),
+                                Pt::new(x, y),
                             ));
                         }
                         PathSegment::ClosePath => {
@@ -102,7 +95,9 @@ pub fn render(svg: &str) -> Raster<SRgba8> {
                     };
                     let fill_alpha = fill.opacity.to_u8();
                     let fill_color = match fill.paint {
-                        usvg::Paint::Color(usvg::Color { red, green, blue }) => SRgba8::new(red, green, blue, fill_alpha),
+                        usvg::Paint::Color(usvg::Color { red, green, blue }) => {
+                            SRgba8::new(red, green, blue, fill_alpha)
+                        }
                         usvg::Paint::Link(_) => SRgba8::new(0, 0, 0, fill_alpha),
                     };
                     p.fill(fill_rule, path, fill_color.convert());
@@ -111,12 +106,16 @@ pub fn render(svg: &str) -> Raster<SRgba8> {
                 if let Some(stroke) = stroke {
                     let stroke_alpha = stroke.opacity.to_u8();
                     let stroke_color = match stroke.paint {
-                        usvg::Paint::Color(usvg::Color { red, green, blue }) => SRgba8::new(red, green, blue, stroke_alpha),
+                        usvg::Paint::Color(usvg::Color { red, green, blue }) => {
+                            SRgba8::new(red, green, blue, stroke_alpha)
+                        }
                         usvg::Paint::Link(_) => SRgba8::new(0, 0, 0, stroke_alpha),
                     };
                     let stroke_miter_limit = stroke.miterlimit.value();
                     let stroke_line_join = match stroke.linejoin {
-                        usvg::LineJoin::Miter => footile::JoinStyle::Miter(stroke_miter_limit as f32),
+                        usvg::LineJoin::Miter => {
+                            footile::JoinStyle::Miter(stroke_miter_limit as f32)
+                        }
                         usvg::LineJoin::Bevel => footile::JoinStyle::Bevel,
                         usvg::LineJoin::Round => footile::JoinStyle::Round,
                     };
@@ -133,7 +132,7 @@ pub fn render(svg: &str) -> Raster<SRgba8> {
     }
 
     // Return pixels
-    Raster::with_raster(&p.raster())
+    Raster::with_raster(p.raster())
 }
 
 #[cfg(test)]
